@@ -1,0 +1,19 @@
+{
+  "name": "flight-faa",
+  "config": {
+    "connector.class": "HttpSource",
+    "tasks.max": "1",
+    "kafka.auth.mode": "KAFKA_API_KEY",
+    "kafka.api.key": "${KAFKA_API_KEY}",
+    "kafka.api.secret": "${KAFKA_API_SECRET}",
+    "output.data.format": "JSON",
+    "http.request.method": "GET",
+    "auth.type": "none",
+    "http.offset.mode": "SIMPLE_INCREMENTING",
+    "http.initial.offset": "0",
+    "name": "flight-faa",
+    "url": "https://nasstatus.faa.gov/api/airport-events",
+    "topic.name.pattern": "faa_raw",
+    "request.interval.ms": "60000"
+  }
+}

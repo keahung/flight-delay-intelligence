@@ -1,0 +1,6 @@
+*.env
+.env
+kafka-key.env
+sr-key.env
+connectors/*.local.json
+__pycache__/

@@ -1,0 +1,25 @@
+{
+  "name": "flight-adsb-sfo",
+  "config": {
+    "connector.class": "HttpSource",
+    "tasks.max": "1",
+    "kafka.auth.mode": "KAFKA_API_KEY",
+    "kafka.api.key": "${KAFKA_API_KEY}",
+    "kafka.api.secret": "${KAFKA_API_SECRET}",
+    "output.data.format": "JSON",
+    "http.request.method": "GET",
+    "auth.type": "none",
+    "http.offset.mode": "SIMPLE_INCREMENTING",
+    "http.initial.offset": "0",
+    "http.response.data.json.pointer": "/ac",
+    "request.interval.ms": "15000",
+    "transforms": "keep,castalt",
+    "transforms.keep.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.keep.include": "hex,type,flight,r,t,alt_baro,alt_geom,gs,track,baro_rate,squawk,category,emergency,lat,lon,seen,seen_pos,dst,dir,messages,rssi",
+    "transforms.castalt.type": "org.apache.kafka.connect.transforms.Cast$Value",
+    "transforms.castalt.spec": "alt_baro:string",
+    "name": "flight-adsb-sfo",
+    "url": "https://api.adsb.lol/v2/lat/37.6213/lon/-122.3790/dist/25",
+    "topic.name.pattern": "aircraft_raw_sfo"
+  }
+}
