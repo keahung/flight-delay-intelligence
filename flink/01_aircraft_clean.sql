@@ -1,42 +1,61 @@
+-- Parse the schemaless ADS-B JSON, type it, and label each aircraft's airport.
+--
+-- R1 FIX: the connectors query a 25 nm RADIUS, which swallows neighbouring
+-- fields -- measured against live data, 18% of "ORD" ground traffic was actually
+-- DuPage (11%) or Midway (7%); JFK's circle contains both LGA and EWR. `at_field`
+-- is a per-airport bounding box over the actual movement area, and every ground
+-- metric downstream must filter on it. Airborne aircraft keep the wider radius,
+-- which is genuinely the terminal area.
 CREATE TABLE aircraft_clean
 WITH ('changelog.mode' = 'append')
 AS
 SELECT * FROM (
   SELECT
     'ORD' AS airport,
-    JSON_VALUE(j,'$.hex')                                   AS hex,
-    TRIM(COALESCE(JSON_VALUE(j,'$.flight'),''))             AS callsign,
-    JSON_VALUE(j,'$.r')                                     AS tail,
-    JSON_VALUE(j,'$.t')                                     AS actype,
-    (JSON_VALUE(j,'$.alt_baro') = 'ground')                 AS on_ground,
-    TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT)             AS alt_ft,
-    JSON_VALUE(j,'$.gs' RETURNING DOUBLE)                   AS gs_kt,
-    TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT)            AS baro_rate,
-    JSON_VALUE(j,'$.lat' RETURNING DOUBLE)                  AS lat,
-    JSON_VALUE(j,'$.lon' RETURNING DOUBLE)                  AS lon,
-    JSON_VALUE(j,'$.dst' RETURNING DOUBLE)                  AS dst_nm,
-    JSON_VALUE(j,'$.seen' RETURNING DOUBLE)                 AS seen_sec,
-    et                                                      AS event_time
+    JSON_VALUE(j,'$.hex')                        AS hex,
+    TRIM(COALESCE(JSON_VALUE(j,'$.flight'),''))  AS callsign,
+    JSON_VALUE(j,'$.r')                          AS tail,
+    JSON_VALUE(j,'$.t')                          AS actype,
+    JSON_VALUE(j,'$.category')                   AS category,
+    (JSON_VALUE(j,'$.alt_baro') = 'ground')      AS on_ground,
+    TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT)  AS alt_ft,
+    JSON_VALUE(j,'$.gs'  RETURNING DOUBLE)       AS gs_kt,
+    TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT) AS baro_rate,
+    JSON_VALUE(j,'$.lat' RETURNING DOUBLE)       AS lat,
+    JSON_VALUE(j,'$.lon' RETURNING DOUBLE)       AS lon,
+    JSON_VALUE(j,'$.seen' RETURNING DOUBLE)      AS seen_sec,
+    (    JSON_VALUE(j,'$.lat' RETURNING DOUBLE) BETWEEN 41.955  AND 42.005
+     AND JSON_VALUE(j,'$.lon' RETURNING DOUBLE) BETWEEN -87.940 AND -87.860) AS at_field,
+    et AS event_time
   FROM (SELECT CAST(val AS STRING) AS j, `$rowtime` AS et FROM aircraft_raw_ord)
   UNION ALL
   SELECT
     'SFO', JSON_VALUE(j,'$.hex'), TRIM(COALESCE(JSON_VALUE(j,'$.flight'),'')),
-    JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'),
+    JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'), JSON_VALUE(j,'$.category'),
     (JSON_VALUE(j,'$.alt_baro') = 'ground'),
     TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
     JSON_VALUE(j,'$.gs' RETURNING DOUBLE), TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT),
     JSON_VALUE(j,'$.lat' RETURNING DOUBLE), JSON_VALUE(j,'$.lon' RETURNING DOUBLE),
-    JSON_VALUE(j,'$.dst' RETURNING DOUBLE), JSON_VALUE(j,'$.seen' RETURNING DOUBLE), et
+    JSON_VALUE(j,'$.seen' RETURNING DOUBLE),
+    (    JSON_VALUE(j,'$.lat' RETURNING DOUBLE) BETWEEN 37.600   AND 37.645
+     AND JSON_VALUE(j,'$.lon' RETURNING DOUBLE) BETWEEN -122.405 AND -122.355),
+    et
   FROM (SELECT CAST(val AS STRING) AS j, `$rowtime` AS et FROM aircraft_raw_sfo)
   UNION ALL
   SELECT
     'JFK', JSON_VALUE(j,'$.hex'), TRIM(COALESCE(JSON_VALUE(j,'$.flight'),'')),
-    JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'),
+    JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'), JSON_VALUE(j,'$.category'),
     (JSON_VALUE(j,'$.alt_baro') = 'ground'),
     TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
     JSON_VALUE(j,'$.gs' RETURNING DOUBLE), TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT),
     JSON_VALUE(j,'$.lat' RETURNING DOUBLE), JSON_VALUE(j,'$.lon' RETURNING DOUBLE),
-    JSON_VALUE(j,'$.dst' RETURNING DOUBLE), JSON_VALUE(j,'$.seen' RETURNING DOUBLE), et
+    JSON_VALUE(j,'$.seen' RETURNING DOUBLE),
+    (    JSON_VALUE(j,'$.lat' RETURNING DOUBLE) BETWEEN 40.620  AND 40.665
+     AND JSON_VALUE(j,'$.lon' RETURNING DOUBLE) BETWEEN -73.825 AND -73.740),
+    et
   FROM (SELECT CAST(val AS STRING) AS j, `$rowtime` AS et FROM aircraft_raw_jfk)
 )
-WHERE hex IS NOT NULL AND hex NOT LIKE '~%';
+WHERE hex IS NOT NULL
+  AND hex NOT LIKE '~%'                       -- drop TIS-B/MLAT, noisy on the ground
+  AND COALESCE(category,'') NOT IN ('C1','C2','C3')  -- drop surface vehicles (tugs, fire, ops)
+  AND COALESCE(seen_sec, 0) < 60;             -- drop stale ghost contacts

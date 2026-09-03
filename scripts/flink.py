@@ -19,7 +19,9 @@ def run(sql,name=None,wait=True,max_rows=25,timeout=180):
     name=name or "s-"+uuid.uuid4().hex[:12]
     d=req("POST",f"{BASE}/statements",{"name":name,"spec":{
         "statement":sql,"compute_pool_id":POOL,
-        "properties":{"sql.current-catalog":"default","sql.current-database":"cluster_0"}}})
+        "properties":{"sql.current-catalog":"default","sql.current-database":"cluster_0",
+                      "sql.tables.scan.startup.mode":"earliest-offset",
+                      "sql.tables.scan.idle-timeout":"60 s"}}})
     if "errors" in d:
         print("SUBMIT ERROR:",json.dumps(d["errors"])[:800]); return None
     t0=time.time(); phase=None

@@ -4,6 +4,28 @@ An independent reviewer read the Flink SQL cold, knowing only the goal and the
 input data. Findings below, with status. Several invalidate the core metric and
 must be fixed before the pipeline's numbers mean anything.
 
+## Status
+
+- **R1 FIXED and verified** — per-airport bounding box. Ground-moving samples are
+  now 100% at their labelled airport (ORD was 82%, with 11% DPA and 7% MDW).
+- **R2 FIXED** — congestion now tracked as `ground_moving` + `ground_stopped` with a
+  derived `queue_ratio` that RISES with congestion; the anomaly detector was moved
+  onto `departures` (throughput), which falls during a backup.
+- **R8 FIXED and confirmed real** — the 4-way join stalled exactly as predicted, on
+  the sparse `departure_events` input rather than `faa_raw`. Setting
+  `sql.tables.scan.idle-timeout = 60 s` unblocked it.
+- **R6 ESCALATED to blocking** — no longer theoretical. Rebuilding `aircraft_clean`
+  reprocessed 80k records in minutes, collapsing every derived `$rowtime` into that
+  wall-clock span. Observed result: `taxi_out_sec` of 0-3 seconds and every wheels-up
+  timestamped within the same 10 seconds. All time-based output is currently wrong.
+  **Fix next:** declare the derived tables explicitly with an `event_time` column and
+  a `WATERMARK`, `INSERT INTO` them, and window on `event_time` rather than `$rowtime`.
+- Also applied from "Smaller": `seen_sec < 60` staleness guard, surface-vehicle
+  filter (`category` C1-C3), climb confirmation on wheels-up (`baro_rate > 200`),
+  `windows_seen >= 6` filter before the LLM call, and the GDP-is-inbound reframing (R4).
+
+## Original findings
+
 ## Blocking — the metric does not measure what it claims
 
 ### R1. "Airport" is a 25 nm circle containing several other airports
