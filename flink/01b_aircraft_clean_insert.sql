@@ -1,14 +1,4 @@
--- Parse the schemaless ADS-B JSON, type it, and label each aircraft's airport.
---
--- R1 FIX: the connectors query a 25 nm RADIUS, which swallows neighbouring
--- fields -- measured against live data, 18% of "ORD" ground traffic was actually
--- DuPage (11%) or Midway (7%); JFK's circle contains both LGA and EWR. `at_field`
--- is a per-airport bounding box over the actual movement area, and every ground
--- metric downstream must filter on it. Airborne aircraft keep the wider radius,
--- which is genuinely the terminal area.
-CREATE TABLE aircraft_clean
-WITH ('changelog.mode' = 'append')
-AS
+INSERT INTO aircraft_clean
 SELECT * FROM (
   SELECT
     'ORD' AS airport,
@@ -32,8 +22,7 @@ SELECT * FROM (
   SELECT
     'SFO', JSON_VALUE(j,'$.hex'), TRIM(COALESCE(JSON_VALUE(j,'$.flight'),'')),
     JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'), JSON_VALUE(j,'$.category'),
-    (JSON_VALUE(j,'$.alt_baro') = 'ground'),
-    TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
+    (JSON_VALUE(j,'$.alt_baro') = 'ground'), TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
     JSON_VALUE(j,'$.gs' RETURNING DOUBLE), TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT),
     JSON_VALUE(j,'$.lat' RETURNING DOUBLE), JSON_VALUE(j,'$.lon' RETURNING DOUBLE),
     JSON_VALUE(j,'$.seen' RETURNING DOUBLE),
@@ -45,8 +34,7 @@ SELECT * FROM (
   SELECT
     'JFK', JSON_VALUE(j,'$.hex'), TRIM(COALESCE(JSON_VALUE(j,'$.flight'),'')),
     JSON_VALUE(j,'$.r'), JSON_VALUE(j,'$.t'), JSON_VALUE(j,'$.category'),
-    (JSON_VALUE(j,'$.alt_baro') = 'ground'),
-    TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
+    (JSON_VALUE(j,'$.alt_baro') = 'ground'), TRY_CAST(JSON_VALUE(j,'$.alt_baro') AS INT),
     JSON_VALUE(j,'$.gs' RETURNING DOUBLE), TRY_CAST(JSON_VALUE(j,'$.baro_rate') AS INT),
     JSON_VALUE(j,'$.lat' RETURNING DOUBLE), JSON_VALUE(j,'$.lon' RETURNING DOUBLE),
     JSON_VALUE(j,'$.seen' RETURNING DOUBLE),
@@ -56,6 +44,6 @@ SELECT * FROM (
   FROM (SELECT CAST(val AS STRING) AS j, `$rowtime` AS et FROM aircraft_raw_jfk)
 )
 WHERE hex IS NOT NULL
-  AND hex NOT LIKE '~%'                       -- drop TIS-B/MLAT, noisy on the ground
-  AND COALESCE(category,'') NOT IN ('C1','C2','C3')  -- drop surface vehicles (tugs, fire, ops)
-  AND COALESCE(seen_sec, 0) < 60;             -- drop stale ghost contacts
+  AND hex NOT LIKE '~%'
+  AND COALESCE(category,'') NOT IN ('C1','C2','C3')
+  AND COALESCE(seen_sec, 0) < 60;

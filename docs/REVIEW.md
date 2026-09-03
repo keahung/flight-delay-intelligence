@@ -14,7 +14,17 @@ must be fixed before the pipeline's numbers mean anything.
 - **R8 FIXED and confirmed real** — the 4-way join stalled exactly as predicted, on
   the sparse `departure_events` input rather than `faa_raw`. Setting
   `sql.tables.scan.idle-timeout = 60 s` unblocked it.
-- **R6 ESCALATED to blocking** — no longer theoretical. Rebuilding `aircraft_clean`
+- **R6 FIXED and verified** — derived tables now declare an explicit `event_time`
+  (or `wheels_up_time`) column with a `WATERMARK` and are populated by `INSERT INTO`
+  rather than `CREATE TABLE AS`. Taxi-out went from 0-3 seconds to a realistic
+  0.2-18.1 min spread, with wheels-up timestamps preserved at their original times
+  during replay. This restores the README's replay guarantee.
+- **R7 FIXED and confirmed real** — the chained window LEFT JOINs were in fact
+  planning as REGULAR joins; the append-only sink rejected them outright
+  ("doesn't support consuming update and delete changes"), which CTAS had been
+  hiding. Replaced by a UNION view + a single windowed aggregation with FILTERed
+  aggregates: append-only by construction, no join state, no watermark minimum.
+- ~~**R6 was escalated to blocking**~~ — no longer theoretical. Rebuilding `aircraft_clean`
   reprocessed 80k records in minutes, collapsing every derived `$rowtime` into that
   wall-clock span. Observed result: `taxi_out_sec` of 0-3 seconds and every wheels-up
   timestamped within the same 10 seconds. All time-based output is currently wrong.
